@@ -43,7 +43,7 @@ object Main extends IOApp:
       // extract values
       h <- p.get(h)
       v <- p.get(v)
-      encoding <- p.get[String](encoding)
+      encoding <- p.getOrElse[String](encoding, "UTF-8")
       input <- p.get[String](input)
       output <- p.get[String](output)
     yield Config(h, v, encoding, input, output)
@@ -57,5 +57,5 @@ object Main extends IOApp:
       .handleErrorWith {
         case e: ArgParserException => IO.println(e.getMessage())
         case e: PrintUsageTextException => IO.println(e.getMessage())
-       }
+      }
       .as(ExitCode.Success)

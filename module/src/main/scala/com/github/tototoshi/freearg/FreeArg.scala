@@ -43,11 +43,11 @@ class FreeArg[M[_]](using ME: MonadError[M, Throwable]):
 
   case class Parse(args: List[String]) extends ParserA[Unit]
 
-  case class GetOptionalArg[T](definition: OptionalArg, binder: ArgBind[M, T]) extends ParserA[T]
+  case class GetOptionalArg[T](definition: OptionalArg, defaultValue: Option[T], binder: ArgBind[M, T]) extends ParserA[T]
 
   case class GetFlagArg(definition: FlagArg) extends ParserA[Boolean]
 
-  case class GetPositionalArg[T](definition: PositionalArg, binder: ArgBind[M, T]) extends ParserA[T]
+  case class GetPositionalArg[T](definition: PositionalArg, defaultValue: Option[T], binder: ArgBind[M, T]) extends ParserA[T]
 
   case class GetVariadicArg[T](definition: VariadicArg, binder: ArgBind[M, T]) extends ParserA[List[T]]
 
@@ -73,13 +73,19 @@ class FreeArg[M[_]](using ME: MonadError[M, Throwable]):
     FreeT.liftF(Parse(args))
 
   def get[T](definition: OptionalArg)(using binder: ArgBind[M, T]): Parser[T] =
-    FreeT.liftF(GetOptionalArg(definition, binder))
+    FreeT.liftF(GetOptionalArg(definition, None, binder))
 
   def get[T](definition: FlagArg): Parser[Boolean] =
     FreeT.liftF(GetFlagArg(definition))
 
   def get[T](definition: PositionalArg)(using binder: ArgBind[M, T]): Parser[T] =
-    FreeT.liftF(GetPositionalArg(definition, binder))
+    FreeT.liftF(GetPositionalArg(definition, None, binder))
+
+  def getOrElse[T](definition: OptionalArg, defaultValue: T)(using binder: ArgBind[M, T]): Parser[T] =
+    FreeT.liftF(GetOptionalArg(definition, Some(defaultValue), binder))
+
+  def getOrElse[T](definition: PositionalArg, defaultValue: T)(using binder: ArgBind[M, T]): Parser[T] =
+    FreeT.liftF(GetPositionalArg(definition, Some(defaultValue), binder))
 
   def get[T](definition: VariadicArg)(using binder: ArgBind[M, T]): Parser[List[T]] =
     FreeT.liftF(GetVariadicArg(definition, binder))
@@ -243,10 +249,10 @@ class FreeArg[M[_]](using ME: MonadError[M, Throwable]):
             _ <- parseArgs(ctx.optionalArgs)
           yield ()
 
-        case GetOptionalArg(optionalArg, binder) =>
+        case GetOptionalArg(optionalArg, defaultValue, binder) =>
           for
             ctx <- StateT.get[M, ParserContext]
-            value <- StateT.liftF(bindOptionalArg(ctx, optionalArg.name, binder))
+            value <- StateT.liftF(bindOptionalArg(ctx, optionalArg.name, defaultValue, binder))
           yield value
 
         case GetFlagArg(flagArg) =>
@@ -255,10 +261,10 @@ class FreeArg[M[_]](using ME: MonadError[M, Throwable]):
             value <- StateT.liftF(ME.pure(ctx.result.hasFlag(flagArg.name)))
           yield value
 
-        case GetPositionalArg(positionalArg, binder) =>
+        case GetPositionalArg(positionalArg, defaultValue, binder) =>
           for
             ctx <- StateT.get[M, ParserContext]
-            value <- StateT.liftF(bindPositionalArg(ctx, positionalArg.name, binder))
+            value <- StateT.liftF(bindPositionalArg(ctx, positionalArg.name, defaultValue, binder))
           yield value
 
         case GetVariadicArg(variadicArg, binder) =>
@@ -281,23 +287,19 @@ class FreeArg[M[_]](using ME: MonadError[M, Throwable]):
             _ <- StateT.liftF(ME.raiseError(new PrintUsageTextException(text)))
           yield ()
 
-    private def bindOptionalArg[A](ctx: ParserContext, name: String, binder: ArgBind[M, A]): M[A] =
-      for
-        stringValue <- ctx.result
-          .getOption(name)
-          .map(ME.pure)
-          .getOrElse(ME.raiseError(new ArgParserException(s"option is not specified: $name")))
-        value <- binder.bind(stringValue)
-      yield value
+    private def bindOptionalArg[A](ctx: ParserContext, name: String, defaultValue: Option[A], binder: ArgBind[M, A]): M[A] =
+      ctx.result.getOption(name) match
+        case Some(value) => binder.bind(value)
+        case None => defaultValue match
+          case Some(value) => ME.pure(value)
+          case None => ME.raiseError(new ArgParserException(s"positional argument is not specified: $name"))
 
-    private def bindPositionalArg[A](ctx: ParserContext, name: String, binder: ArgBind[M, A]): M[A] =
-      for
-        stringValue <- ctx.result
-          .getPositionalArg(name)
-          .map(ME.pure)
-          .getOrElse(ME.raiseError(new ArgParserException("positional argument is not specified: $name")))
-        value <- binder.bind(stringValue)
-      yield value
+    private def bindPositionalArg[A](ctx: ParserContext, name: String, defaultValue: Option[A], binder: ArgBind[M, A]): M[A] =
+      ctx.result.getPositionalArg(name) match
+        case Some(value) => binder.bind(value)
+        case None => defaultValue match
+          case Some(value) => ME.pure(value)
+          case None => ME.raiseError(new ArgParserException(s"positional argument is not specified: $name"))
 
     private def bindVariadicArg[A](ctx: ParserContext, binder: ArgBind[M, A]): M[List[A]] =
       Traverse[List].traverse(ctx.result.variadicArgs)(v => binder.bind(v))
