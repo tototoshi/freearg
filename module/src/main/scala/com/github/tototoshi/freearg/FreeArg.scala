@@ -34,7 +34,7 @@ class FreeArg[M[_]](using ME: MonadError[M, Throwable]):
 
   case class DefineVariadicArg(arg: VariadicArg) extends ParserA[VariadicArg]
 
-  case class Parse(args: List[String]) extends ParserA[Unit]
+  case class Parse() extends ParserA[Unit]
 
   case class GetOptionalArg[T](definition: OptionalArg, defaultValue: Option[T], binder: ArgBind[M, T]) extends ParserA[T]
 
@@ -62,8 +62,8 @@ class FreeArg[M[_]](using ME: MonadError[M, Throwable]):
   def variadic(name: String, description: String = ""): Parser[VariadicArg] =
     FreeT.liftF(DefineVariadicArg(VariadicArg(name, description)))
 
-  def parse(args: List[String]): Parser[Unit] =
-    FreeT.liftF(Parse(args))
+  def parse(): Parser[Unit] =
+    FreeT.liftF(Parse())
 
   def get[T](definition: OptionalArg)(using binder: ArgBind[M, T]): Parser[T] =
     FreeT.liftF(GetOptionalArg(definition, None, binder))
@@ -231,7 +231,7 @@ class FreeArg[M[_]](using ME: MonadError[M, Throwable]):
             _ <- StateT.set(updated)
           yield v
 
-        case Parse(args) =>
+        case Parse() =>
           for
             ctx <- StateT.get[M, ParserContext]
             _ <- parseArgs(ctx.optionalArgs)

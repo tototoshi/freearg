@@ -35,7 +35,7 @@ object Main extends IOApp:
       output <- p.positional("output", "output file")
 
       // parse arguments
-      _ <- p.parse(args)
+      _ <- p.parse()
 
       // if help flag is set, print usage text and exit
       _ <- Monad[p.Parser].ifM(p.get(h))(p.printUsageText(), Monad[p.Parser].unit)
