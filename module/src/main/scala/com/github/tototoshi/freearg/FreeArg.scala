@@ -159,7 +159,8 @@ class FreeArg[M[_]](using ME: MonadError[M, Throwable]):
         yield true
 
       case OptionNameAndValue(name, value) :: rest if !hasOptionalArg(name) =>
-        error(s"no such option: $name")
+        if (hasFlagArg(name)) error(s"name should not have a value: $name")
+        else error(s"no such option: $name")
 
       case OptionName(name) :: OptionValue(value) :: rest if hasOptionalArg(name) =>
         for
