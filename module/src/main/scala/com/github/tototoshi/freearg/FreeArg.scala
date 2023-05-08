@@ -1,16 +1,9 @@
 package com.github.tototoshi.freearg
 
-import cats.MonadError
-import cats.~>
-import cats.free.Free
-import cats.data.State
-import cats.free.FreeT
-import cats.arrow.FunctionK
-import cats.data.StateT
+import cats.*
 import cats.implicits.*
-import java.util.Optional
-import cats.Monad
-import cats.Traverse
+import cats.free.{Free, FreeT}
+import cats.data.{State, StateT}
 
 class PrintUsageTextException(message: String) extends RuntimeException(message)
 
@@ -131,12 +124,6 @@ class FreeArg[M[_]](using ME: MonadError[M, Throwable]):
 
   object ParsingResult:
     def empty: ParsingResult = ParsingResult(Map.empty, Nil, Map.empty, Nil)
-
-  def restArgs(): ParserStateT[List[String]] = StateT.get[M, ParserContext].map(_.restArgs)
-
-  def some[T](value: T): ParserStateT[Option[T]] = StateT.pure(Some(value))
-
-  def none[T](): ParserStateT[Option[T]] = StateT.pure(None)
 
   def parseArgs(optionalArgs: List[OptionalArg]): ParserStateT[Unit] =
     Monad[ParserStateT].tailRecM(optionalArgs) { optionalArgs =>
@@ -290,17 +277,13 @@ class FreeArg[M[_]](using ME: MonadError[M, Throwable]):
     private def bindOptionalArg[A](ctx: ParserContext, name: String, defaultValue: Option[A], binder: ArgBind[M, A]): M[A] =
       ctx.result.getOption(name) match
         case Some(value) => binder.bind(value)
-        case None => defaultValue match
-          case Some(value) => ME.pure(value)
-          case None => ME.raiseError(new ArgParserException(s"positional argument is not specified: $name"))
+        case None => defaultValue.map(ME.pure).getOrElse(ME.raiseError(new ArgParserException(s"option is not specified: $name")))
 
     private def bindPositionalArg[A](ctx: ParserContext, name: String, defaultValue: Option[A], binder: ArgBind[M, A]): M[A] =
       ctx.result.getPositionalArg(name) match
         case Some(value) => binder.bind(value)
-        case None => defaultValue match
-          case Some(value) => ME.pure(value)
-          case None => ME.raiseError(new ArgParserException(s"positional argument is not specified: $name"))
-
+        case None => defaultValue.map(ME.pure).getOrElse(ME.raiseError(new ArgParserException(s"positional argument is not specified: $name"))
+)
     private def bindVariadicArg[A](ctx: ParserContext, binder: ArgBind[M, A]): M[List[A]] =
       Traverse[List].traverse(ctx.result.variadicArgs)(v => binder.bind(v))
 
