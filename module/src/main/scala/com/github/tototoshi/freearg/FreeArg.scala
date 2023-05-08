@@ -258,7 +258,7 @@ class FreeArg[M[_]](using ME: MonadError[M, Throwable]):
         case GetVariadicArg(variadicArg, binder) =>
           for
             ctx <- StateT.get[M, ParserContext]
-            value <- StateT.liftF(bindVariadicArg(ctx, binder))
+            value <- StateT.liftF(bindVariadicArg(ctx, variadicArg.name, binder))
           yield value
 
         case PrintUsageText() =>
@@ -276,15 +276,11 @@ class FreeArg[M[_]](using ME: MonadError[M, Throwable]):
           yield ()
 
     private def bindOptionalArg[A](ctx: ParserContext, name: String, defaultValue: Option[A], binder: ArgBind[M, A]): M[A] =
-      ctx.result.getOption(name) match
-        case Some(value) => binder.bind(value)
-        case None => defaultValue.map(ME.pure).getOrElse(ME.raiseError(new ArgParserException(s"option is not specified: $name")))
+      binder.bind(name, ctx.result.getOption(name), defaultValue)
 
     private def bindPositionalArg[A](ctx: ParserContext, name: String, defaultValue: Option[A], binder: ArgBind[M, A]): M[A] =
-      ctx.result.getPositionalArg(name) match
-        case Some(value) => binder.bind(value)
-        case None => defaultValue.map(ME.pure).getOrElse(ME.raiseError(new ArgParserException(s"positional argument is not specified: $name"))
-)
-    private def bindVariadicArg[A](ctx: ParserContext, binder: ArgBind[M, A]): M[List[A]] =
-      Traverse[List].traverse(ctx.result.variadicArgs)(v => binder.bind(v))
+      binder.bind(name, ctx.result.getPositionalArg(name), defaultValue)
+
+    private def bindVariadicArg[A](ctx: ParserContext, name: String, binder: ArgBind[M, A]): M[List[A]] =
+      Traverse[List].traverse(ctx.result.variadicArgs)(v => binder.bind(name, Some(v), None))
 

@@ -43,7 +43,7 @@ object Main extends IOApp:
       // extract values
       h <- p.get(h)
       v <- p.get(v)
-      encoding <- p.getOrElse[String](encoding, "UTF-8")
+      encoding <- p.get[String](encoding)
       input <- p.get[String](input)
       output <- p.get[String](output)
     yield Config(h, v, encoding, input, output)
