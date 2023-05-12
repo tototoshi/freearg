@@ -36,11 +36,13 @@ class FreeArg[M[_]](using ME: MonadError[M, Throwable]):
 
   case class Parse() extends ParserA[Unit]
 
-  case class GetOptionalArg[T](definition: OptionalArg, defaultValue: Option[T], binder: ArgBind[M, T]) extends ParserA[T]
+  case class GetOptionalArg[T](definition: OptionalArg, defaultValue: Option[T], binder: ArgBind[M, T])
+      extends ParserA[T]
 
   case class GetFlagArg(definition: FlagArg) extends ParserA[Boolean]
 
-  case class GetPositionalArg[T](definition: PositionalArg, defaultValue: Option[T], binder: ArgBind[M, T]) extends ParserA[T]
+  case class GetPositionalArg[T](definition: PositionalArg, defaultValue: Option[T], binder: ArgBind[M, T])
+      extends ParserA[T]
 
   case class GetVariadicArg[T](definition: VariadicArg, binder: ArgBind[M, T]) extends ParserA[List[T]]
 
@@ -264,23 +266,50 @@ class FreeArg[M[_]](using ME: MonadError[M, Throwable]):
         case PrintUsageText() =>
           for
             ctx <- StateT.get[M, ParserContext]
-            text =
-            ctx.flagArgs.map(f => s"[--${f.name}]").mkString(" ") +
-            " " +
-            ctx.optionalArgs.map(o => s"[--${o.name} VALUE]").mkString(" ") +
-            " " +
-            ctx.positionalArgs.map(p => s"${p.name}").mkString(" ") +
-            " " +
-            ctx.variadicArgs.map(v => s"${v.name}...").mkString(" ")
+            text = makeUsageText(ctx)
             _ <- StateT.liftF(ME.raiseError(new PrintUsageTextException(text)))
           yield ()
 
-    private def bindOptionalArg[A](ctx: ParserContext, name: String, defaultValue: Option[A], binder: ArgBind[M, A]): M[A] =
+    private def makeUsageText(ctx: ParserContext): String =
+      ctx.flagArgs
+        .map { f =>
+          f.name
+            .split("\\|")
+            .toList
+            .map(key => if key.length == 1 then s"-${key}" else s"--${key}")
+            .mkString("[", "|", "]")
+        }
+        .mkString(" ") +
+        " " +
+        ctx.optionalArgs
+          .map { f =>
+            f.name
+              .split("\\|")
+              .toList
+              .map(key => if key.length == 1 then s"-${key}" else s"--${key}")
+              .mkString("[", "|", " VALUE]")
+          }
+          .mkString(" ") +
+        " " +
+        ctx.positionalArgs.map(p => s"${p.name}").mkString(" ") +
+        " " +
+        ctx.variadicArgs.map(v => s"${v.name}...").mkString(" ")
+
+    private def bindOptionalArg[A](
+        ctx: ParserContext,
+        name: String,
+        defaultValue: Option[A],
+        binder: ArgBind[M, A]
+    ): M[A] =
       binder.bind(name, ctx.result.getOption(name), defaultValue)
 
-    private def bindPositionalArg[A](ctx: ParserContext, name: String, defaultValue: Option[A], binder: ArgBind[M, A]): M[A] =
+    private def bindPositionalArg[A](
+        ctx: ParserContext,
+        name: String,
+        defaultValue: Option[A],
+        binder: ArgBind[M, A]
+    ): M[A] =
       binder.bind(name, ctx.result.getPositionalArg(name), defaultValue)
 
     private def bindVariadicArg[A](ctx: ParserContext, name: String, binder: ArgBind[M, A]): M[List[A]] =
       Traverse[List].traverse(ctx.result.variadicArgs)(v => binder.bind(name, Some(v), None))
-
